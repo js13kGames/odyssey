@@ -48,7 +48,7 @@ function createUI() {
 
 	infoTab = generateUIButton(uiDiv, 'v{VERSION}',
 		() => {
-			if (battleIntro) return; // disallow clicks when in the dungeon entrance (dialog is being used)
+			if (battleIntro || autoBattle) return; // disallow clicks when in the dungeon entrance (dialog is being used)
 			prepareDialog(
 				state ? inBattle==1 ? "<br>Dungeon floor " + dungeonStage : "Day: " + timePassed : "",
 				"<br>" + (
@@ -190,6 +190,7 @@ function prepareDialogButtons(_dialog, close, callback1, btn1, callback2, _btn2)
 
 function displayDialog() {
 	inDialog = !inDialog;
+	SoundFXui();
 	dialog.style.display = inDialog ? 'block' : 'none';
 	gameContainer.style.display = inDialog ? 'none' : 'block';
 	uiDiv.style.pointerEvents = inDialog ? 'auto' : 'none';
@@ -292,12 +293,12 @@ function backFromDialog() {
 }
 
 function closeButtonClick(e) {
-	if (playerHealth < 0 || shipHealth < 0) return;
+	if (playerHealth < 0 || shipHealth < 0 || autoBattle) return;
 	prepareDialog("<br>Quit Game", "<br>Are you sure?<br>", quitGame, "Yes", displayDialog, "No");
 }
 
 function infoButtonClick(id = 0, _hp, _att) {
-	if (paused || hardChoice) return;
+	if (paused || hardChoice || autoBattle) return;
 	if (battleIntro) return; // disallow info clicks when in the dungeon entrance (because dialog is being used)
 	prepareDialog(
 		(id == 1 ? "Ship" : id == 2 ? "Crew" : !id ? "Hero" : getEnemyName(id == 12 ? 12 : id - 3)) + "<br>",
@@ -319,27 +320,28 @@ function infoButtonClick(id = 0, _hp, _att) {
 function checkCrewSailing() {
 	if (crewHealth < 1) {
 		resizeUI();
-		if (gold < crewHealthMax * crewPaid) {
-			prepareDialog("Fatal Crew Mutiny!", "Game Over", quitGame);
-		} else {
-			prepareDialog("Revolt!", "Crew demands:", () => {
-				spendGold(crewHealthMax * crewPaid);
-				crewPaid ++;
-				crewHealth = crewHealthMax;
-				hardChoice = false;
-				backFromDialog();
-			}, "Pay " + goldIcon + crewHealthMax * crewPaid);
-		}
+		prepareDialog("Revolt!", "<br>Crew demands:<br>", () => {
+			if (gold < crewHealthMax * crewPaid) {
+				completeGame("Fatal Mutiny");
+				return;
+			}
+			spendGold(crewHealthMax * crewPaid);
+			crewPaid ++;
+			crewHealth = crewHealthMax/2|0;
+			hardChoice = false;
+			backFromDialog();
+			startNewDay();
+		}, "Pay " + goldIcon + crewHealthMax * crewPaid);
 		hardChoice = true;
 	}
 }
 
 
-function debugBoard() {
+/*function debugBoard() {
 	if (_debug) console.log(
 		unitsData.map(arr => arr.map(num => (!num ? "0" + num.toString(16) : (num==7?"^":num>=1&&num<11?num<7?num<3?"█":"█":"█":num==11?"▀":" ") + num.toString(16)).toUpperCase())).join("\n")
 	);
-}
+}*/
 
 // debug visitedData
 /*if (_debug) console.log(

@@ -11,9 +11,9 @@ let unit,
 	hasTutorial,// displays initial info with the "?" button
 	autoBattle;// allows automatic battles
 
-const colors = [, "red", "#fff", "#0ff", "#ff0", "#f0f"];
-const shipPrices = [250,500,1e3];
-const crewPrices = [200,300,500];
+const colors = [, "red", "#fff", "#0ff", "#ff0", "#f0f", "#0f0"];
+const shipPrices = [300,600,1200];
+const crewPrices = [250,500,1e3];
 
 let turn, gold,
 	moveLeft, moveLimit, timePassed,
@@ -28,6 +28,7 @@ let expLevels = [200,500,1e3];
 
 // initialize vars for new game
 function initVars() {
+	onFoot = true;
 	turn = 0;
 	gold = 50;
 	moveLeft = 24; moveLimit = 24;
@@ -104,7 +105,7 @@ function finalizeMove(dir) {
 				enemy.y += enemy.movingY;
 				enemy.movingY = 0;
 			}
-			enemy.overlay = unitsData[enemy.y][enemy.x];
+			enemy.overlay = unitsData[enemy.y][enemy.x];// TODO: fix animation movement glitches
 			unitsData[enemy.y][enemy.x] = enemy.type;
 		}
 	});
@@ -119,18 +120,25 @@ function finalizeMove(dir) {
 		backFromDialog();
 	}
 
-	if (!onFoot && dir) {
+	if (!onFoot && dir && !boarding) {
 		moveLeft -= 1;
 		if (moveLeft < 1) {
-			crewHealth -= shipHealthMax / 9 | 0;
-			moveLeft += moveLimit / 2 | 0;
-			checkCrewSailing();
+			// Final Boss coming for you
+			if (timePassed == 13) {
+				finalBattle(2);
+			} else {
+				crewHealth -= shipHealthMax / 3 | 0;
+				moveLeft += moveLimit / 2 | 0;
+			}
 		}
+		resizeUI();
 	}
+
+	checkCrewSailing();
 
 	revealAroundUnit(playerX, playerY);
 
-	debugBoard();
+	//debugBoard();
 }
 
 function performEnemyMoves() {
@@ -139,22 +147,22 @@ function performEnemyMoves() {
 	// move enemies
 	enemies.forEach(enemy => { // RIGHT
 		if (islandGenerator.rand(0,1)) {
-			if (((enemy.type == UnitType.KNIGHT || enemy.type == UnitType.CRAB) && isWalkable(enemy.x + 1, enemy.y, 1)
-					//enemy.type == UnitType.SERPENT && isSailable(enemy.x + 1, enemy.y, TileType.RIFF1, 1)
-				) && islandGenerator.rand(0, enemy.x > playerX ? 1 : 3)) {
+			if (((enemy.type == UnitType.KNIGHT || enemy.type == UnitType.CRAB) && isWalkable(enemy.x + 1, enemy.y, enemy.type)
+					|| enemy.type == UnitType.SERPENT && isSailable(enemy.x + 1, enemy.y, TileType.RIFF1, 1)
+				) && islandGenerator.rand(0, enemy.x > playerX ? 1 : enemy.type == UnitType.KNIGHT ? 9 : 3)) {
 					enemy.movingX = 1; enemy.movingY = 0;
 			} else if (( // LEFT
-					(enemy.type == UnitType.KNIGHT || enemy.type == UnitType.CRAB) && isWalkable(enemy.x - 1, enemy.y, 1)
-					//enemy.type == UnitType.SERPENT && isSailable(enemy.x - 1, enemy.y, TileType.RIFF1, 1)
-				) && islandGenerator.rand(0, enemy.x < playerX ? 1 : 3)) {
+					(enemy.type == UnitType.KNIGHT || enemy.type == UnitType.CRAB) && isWalkable(enemy.x - 1, enemy.y, enemy.type)
+					|| enemy.type == UnitType.SERPENT && isSailable(enemy.x - 1, enemy.y, TileType.RIFF1, 1)
+				) && islandGenerator.rand(0, enemy.x < playerX ? 1 : enemy.type == UnitType.KNIGHT ? 9 : 3)) {
 					enemy.movingX = -1; enemy.movingY = 0;
 			} else if (( // DOWN
-					(enemy.type == UnitType.KNIGHT || enemy.type == UnitType.CRAB) && isWalkable(enemy.x, enemy.y + 1, 1)
-				) && islandGenerator.rand(0, enemy.y > playerY ? 1 : 3)) {
+					(enemy.type == UnitType.KNIGHT || enemy.type == UnitType.CRAB) && isWalkable(enemy.x, enemy.y + 1, enemy.type)
+				) && islandGenerator.rand(0, enemy.y > playerY ? 1 : enemy.type == UnitType.KNIGHT ? 9 : 3)) {
 					enemy.movingY = 1; enemy.movingX = 0;
 			} else if (( // UP
-					(enemy.type == UnitType.KNIGHT || enemy.type == UnitType.CRAB) && isWalkable(enemy.x, enemy.y - 1, 1)
-				) && islandGenerator.rand(0, enemy.y < playerY ? 1 : 3)) {
+					(enemy.type == UnitType.KNIGHT || enemy.type == UnitType.CRAB) && isWalkable(enemy.x, enemy.y - 1, enemy.type)
+				) && islandGenerator.rand(0, enemy.y < playerY ? 1 : enemy.type == UnitType.KNIGHT ? 9 : 3)) {
 					enemy.movingY = -1; enemy.movingX = 0;
 			}
 		}
@@ -195,12 +203,12 @@ function quitGame() {
 	switchState();
 }
 
-function isWalkable(x, y, enemy) {
+function isWalkable(x, y, enemyType) {
 	// check if current unit tile is occupied or empty, or walkable item as gold, tree, etc.
 	// also check if current map tile is land
 	return (
 		!unitsData[y][x] ||
-		(unitsData[y][x] < UnitType.SHIPUP || unitsData[y][x] > UnitType.SHIPRIGHT && unitsData[y][x] < UnitType.CASTLE) && !enemy ||
+		(unitsData[y][x] < UnitType.SHIPUP || unitsData[y][x] > UnitType.SHIPRIGHT && unitsData[y][x] < UnitType.CASTLE) && !enemyType ||
 		(unitsData[y][x] > UnitType.CRAB && unitsData[y][x] < UnitType.BAT)
 	) && mapData[y][x] > TileType.RIFF2;
 }

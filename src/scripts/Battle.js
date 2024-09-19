@@ -24,17 +24,17 @@ function getEnemyName(_id) {
 function getEnemyAttack(_id) {
 	if (dungeonSiege) return 2 + (1+castles.length) * 2;
 	return [
-		1, 2, 2, 1, 3,
-		3, 6, 5, 12, 16,
+		1, 2, 2, 3, 3,
+		6, 5, 9, 12, 16,
 		2, 5, 3, 2
 	][_id > 13 ? _id - 20 : _id];
 }
 
 function getEnemyHP(_id) {
-	if (dungeonSiege) return 24 + castles.length * 12;
+	if (dungeonSiege) return 32 + castles.length * 12;
 	return [
-		6, 10, 12, 16, 24,
-		20, 42, 32, 60, 90,
+		6, 10, 16, 12, 24,
+		16, 50, 42, 72, 120,
 		24, 50, 24, 20
 	][_id > 13 ? _id - 20 : _id];
 }
@@ -43,8 +43,8 @@ function getDungeonStagesString(label = "") {
 	let haveEnemies, notCleared, previousEmpty, dungeonStages = label + "Stages: ";
 	dungeon.forEach((_nextStage, _index) => {
 		haveEnemies = !_nextStage.every(x => x == -1);
-		if (_index > 2 && haveEnemies) {
-			notCleared = 1;
+		if (_index > 2 && haveEnemies && !notCleared) {
+			notCleared = _index;
 		}
 		if (_index < 3 || !haveEnemies || previousEmpty) {
 			// add current, cleared and rooms that are ahead
@@ -52,7 +52,7 @@ function getDungeonStagesString(label = "") {
 		}
 		previousEmpty = !haveEnemies;
 	});
-	if (dungeon.length > 3 && notCleared) {
+	if (dungeon.length > 3 && notCleared < dungeon.length-1) {
 		dungeonStages += ' &#8943';// add [⋯] at the end if there are unexplored dungeon rooms
 	}
 	return [dungeonStages, haveEnemies];
@@ -63,12 +63,13 @@ function displayDungeon(_dungeon) {
 	prepareDialog(
 		_dungeon[0],
 		"",
-		_dungeon[1] ? descendInDungeon : closeAllScreens, _dungeon[1] ? "Enter" : "Exit",
+		_dungeon[1] ? e => descendInDungeon(0, dungeonRoom) : closeAllScreens, _dungeon[1] ? "Enter" : "Exit",
 		_dungeon[1] ? closeAllScreens : 0, _dungeon[1] ? "Exit" : 0
 	);
 }
 
 function descendInDungeon(event, _skip) {
+	dungeonSiege = false;
 	dungeonFlee = 0;
 	dungeonStage = -1;
 	dungeonRoom = -1;
@@ -86,6 +87,7 @@ function descendInDungeon(event, _skip) {
 	if (_skip == 1) {
 		dungeonBattle();
 	} else {
+		hardChoice = false;
 		battleIntro = true;
 		updateInfoTab();
 		updateActionButton();
@@ -110,8 +112,10 @@ function dungeonBattle() {
 		"<br>",
 		getEnemyStatsString(),
 		e => {
-			autoBattle = true;
-			beginNewRound(1);
+			if (!autoBattle) {
+				beginNewRound(1);
+				autoBattle = true;
+			}
 		}, "Auto Battle",
 		tryToFleeBattle, "Flee"
 	);
@@ -145,8 +149,10 @@ function getEnemyHealthBar() {
 }
 
 function closeAllScreens() {
+	tween.transitionZ = 0;
 	hardChoice = false;
 	battleIntro = false;
+	autoBattle = false;
 	fadeBackground(0);
 	if (inBattle) displayBattleScreen();// close the battle screen
 	if (inDialog) displayDialog();// close any visible dialogs
@@ -160,12 +166,14 @@ function closeAllScreens() {
 }
 
 function tryToFleeBattle() {
-	if (dungeonFighting) return;
+	if (dungeonFighting || autoBattle || paused) return;
 	let _level = inBattle == 1 ? dungeonStage + 1 : getEnemyName(dungeonEnemy).length - 3;
 	let _enemy = dungeonEnemy > 9 ? dungeonEnemy - 9 : dungeonEnemy;
-	if (Math.random() * _level > _enemy && dungeonFlee > -1) {
+	if ((!onFoot && timePassed < 9) || dungeonSiege) {
+		animateUnitHit(_enemy + 3, e => prepareDialog("Fled", "<br>Not after a hit.<br>", closeAllScreens));
+	} else
+	if (Math.random() * _level + dungeonFlee > _enemy) {
 		// player will escape
-		//console.log(1, Math.random() * _level , dungeonEnemy)
 		if (Math.random() * _level < dungeonEnemy) {
 			// player will however suffer a hit
 			animateUnitHit(_enemy + 3, e => prepareDialog("Fled", "<br>Not after a hit.<br>", closeAllScreens));
@@ -173,16 +181,9 @@ function tryToFleeBattle() {
 			prepareDialog("<br>Fled", "<br>", closeAllScreens);
 		}
 	} else {
-		// player cannot escape
-		//console.log(2, Math.random() * _level , dungeonEnemy)
-		if (Math.random() * _level < _enemy && dungeonFlee < _level) {
-			// player will receive a hit on top of that
-			dungeonFlee ++;// TODO: fix fleeing in land and marine battles
-			animateUnitHit(_enemy + 3, e => prepareDialog("Escaping...", "<br>Got hit trying.<br>", displayDialog));
-		} else {
-			dungeonFlee = -1;
-			prepareDialog("<br>Cannot flee battle!", "<br>", displayDialog);
-		}
+		// player cannot escape and will receive a hit on top of that
+		dungeonFlee ++;
+		animateUnitHit(_enemy + 3, e => prepareDialog("Escaping...", "<br>Got hit trying.<br>", displayDialog));
 	}
 }
 
@@ -236,7 +237,7 @@ function animateUnitHit(_id, _callback, _animationOnly) {
 								// attacks the ship
 								shipHealth -= dungeonEnemyAttack;
 								checkShipHealth(_callback);
-							} else if (Math.random() < .5 || crewHealth < dungeonEnemyAttack) {
+							} else if (Math.random() < .5 || !crewHealth) {
 								// attacks the hero
 								playerHealth -= dungeonEnemyAttack;
 								checkPlayerHealth(_callback);
@@ -294,8 +295,7 @@ function disableBattleInteractions() {
 function checkShipHealth(_callback) {
 	if (shipHealth < 1) {
 		animateDamage(shipBitmap, () => {
-			prepareDialog("<br>Ship sunk!", "<br>Game Over<br>", quitGame);
-			hardChoice = true;
+			completeGame("Ship sunk");
 		});
 	} else {
 		animateDamage(shipBitmap, _callback);
@@ -305,8 +305,7 @@ function checkShipHealth(_callback) {
 function checkPlayerHealth(_callback) {
 	if (playerHealth < 1) {
 		animateDamage(playerBitmap, () => {
-			prepareDialog("<br>Hero fell!", "<br>Game Over<br>", quitGame);
-			hardChoice = true;
+			completeGame("Hero fell");
 		});
 	} else {
 		animateDamage(playerBitmap, _callback);
@@ -316,7 +315,6 @@ function checkPlayerHealth(_callback) {
 function checkCrewHealth(_callback) {
 	if (crewHealth < 0) {
 		crewHealth = 0;
-		crewButton.style.opacity = .5;
 	}
 	animateDamage(crewBitmap, _callback);
 }
@@ -332,7 +330,7 @@ function battleVictory() {
 		e => {
 			enableBattleInteractions();
 			enemiesKilled.push(dungeonEnemy);
-			gainExperience(dungeonEnemy);
+			let _levelUp = gainExperience(dungeonEnemy);
 			SoundFXgetGold();
 			if (inBattle==1) {
 				dungeon[dungeonStage - 1][dungeonRoom - 1] = -1;// mark the enemy as destroyed
@@ -340,20 +338,30 @@ function battleVictory() {
 				let bonus = islandGenerator.rand(dungeonStage, getEnemyHP(dungeonEnemy)/2) * (stageCleared ? 2 : 1) + (stageCleared ? dungeonStage*9 : 0);
 				gold += bonus;
 				let lastStage = dungeonStage == dungeon.length && stageCleared;
+				hardChoice = false;
+				actButton.style.opacity = .5;
+				if (lastStage) {
+					if (dungeonStage % 2) crewAttack += 1; else playerAttack += 1;
+				}
 
 				prepareBattleScreen(
-					getSpan(stageCleared ? `<br>Stage ${dungeonStage} cleared!` : "<br>Victory!", "#fe8", "9vmin"),
-					`<br>Found ${bonus} gold.<br>` + (lastStage ? "<br>Found Healing Potion.<br>" : ""),
+					getSpan(lastStage ? 'Dungeon cleared!' : stageCleared ? `<br>Stage ${dungeonStage} cleared!` : "<br>Victory!", "#fe8", "9vmin"),
+					`<br>Found ${bonus} gold.<br>` +
+						(_levelUp ? "<br>Hero level up!<br>" : "") +
+						(lastStage ? dungeonStage % 2 ? "<br>Crew Attack +1<br>" : "<br>Hero Attack +1<br>" : ""),
 					lastStage ? completeDungeon : stageCleared ? descendInDungeon : e => descendInDungeon(0, 1),
 					lastStage ? "Complete" : stageCleared ? "Descend" : "Advance",
 					lastStage ? 0 : closeAllScreens, "Exit"
 				);
 			} else {
 				let bonus = islandGenerator.rand(9, getEnemyHP(dungeonEnemy)*2);
-				
+				if (dungeonEnemy == 9) {
+					completeGame();
+					return;
+				} else
 				if (dungeonEnemyUnit.type == UnitType.CASTLE) {
 					// castle conquered
-					bonus *= 3;
+					bonus *= 2;
 					castles.push([dungeonEnemyUnit.origin, dungeonEnemyUnit.x, dungeonEnemyUnit.y, 0]);
 					dungeonEnemyUnit.origin = 1;
 				} else {
@@ -366,6 +374,7 @@ function battleVictory() {
 				
 				prepareBattleScreen(
 					getSpan("<br>Victory!", "#fe8", "9vmin"),
+					(_levelUp ? "<br>Hero level up!<br>" : "") +
 					`<br>Found ${bonus} gold.<br>`,
 					closeAllScreens
 				);
@@ -383,22 +392,20 @@ function gainExperience(_enemyId) {
 	experience += getEnemyHP(_enemyId) / 2 | 0;
 	if (
 		playerLevel < 4 &&
-		playerLevel == 1 && experience >= expLevels[playerLevel-1]
+		experience >= expLevels[playerLevel - 1]
 	) {
 		gainLevel();
+		return true;
 	}
+	return false
 }
 
 function gainLevel() {
 	playerLevel ++;
 	playerAttack ++;
-	playerHealth += 8;
-	playerHealthMax += 8;
+	playerHealth += 12;
+	playerHealthMax += 12;
 	updateInfoTab();
-	prepareDialog(
-		"<br>Hero level up!</br>",
-		"Attack +1 &nbsp; HP: +8<br>"
-	);
 }
 
 function prepareSurfaceBattle(_unit, _siege) {
@@ -407,17 +414,50 @@ function prepareSurfaceBattle(_unit, _siege) {
 	dungeonEnemy = _unit.type + 3;
 	dungeonEnemyHealth = getEnemyHP(dungeonEnemy);
 	dungeonEnemyAttack = getEnemyAttack(dungeonEnemy);
-	battleIntro = true;
 
-	updateInfoTab();
-	updateActionButton();
+	if (_unit.type == UnitType.SERPENT) {
+		// direct battle with a serpent
+		dungeonBattle();
+	} else {
+		battleIntro = true;
+
+		updateInfoTab();
+		updateActionButton();
+		prepareDialog(
+			dungeonSiege ? `Enemy Fort ${getSpan('&#9873', colors[dungeonEnemyUnit.origin])}<br>` : `<br>`,
+			dungeonSiege ? `` : `<br>You see a ${getEnemyName(dungeonEnemy)}<br>`,
+			dungeonBattle, dungeonSiege ? "Siege" : "Fight",
+			closeAllScreens, "Run"
+		);
+
+		dialog.firstChild.append((dungeonEnemy-3 == UnitType.KNIGHT ? offscreenBitmapsFlipped : offscreenBitmaps)[_unit.type-1]);
+		fadeBackground();
+	}
+}
+
+function finalBattle(_forced = 1) {
+	inBattle = 4;
+	dungeonEnemy = 9;
+	dungeonEnemyHealth = getEnemyHP(dungeonEnemy) * _forced;
+	dungeonEnemyAttack = getEnemyAttack(dungeonEnemy) * _forced;
+
 	prepareDialog(
-		dungeonSiege ? `Enemy Fort ${getSpan('&#9873', colors[dungeonEnemyUnit.origin])}<br>` : `<br>`,
-		dungeonSiege ? `` : `<br>You see a${dungeonEnemy==3||dungeonEnemy==4?"n":""} ${getEnemyName(dungeonEnemy)}<br>`,
-		dungeonBattle, dungeonSiege ? "Siege" : "Fight",
-		closeAllScreens, "Run"
+		`<br>`,
+		`<br>Ambushed by the ${getEnemyName(dungeonEnemy)}!<br>`,
+		dungeonBattle, "Suffer"
 	);
 
-	dialog.firstChild.append((dungeonEnemy-3 == UnitType.KNIGHT ? offscreenBitmapsFlipped : offscreenBitmaps)[_unit.type-1]);
+	dialog.firstChild.append(offscreenBitmaps[36 + dungeonEnemy]);
 	fadeBackground();
+}
+
+function completeGame(_gameOver) {
+	inBattle = 0;
+	hardChoice = 0;
+	prepareDialog(
+		_gameOver ? `<br>${_gameOver}! Game Over!` : `<br>YOU MADE IT JUNIOR!<br>`,
+		`<br>turn: ${turn} &nbsp; exp: ${experience} &nbsp; score: ${enemiesKilled.length}<br>`,
+		quitGame
+	);
+	hardChoice = 1;
 }
