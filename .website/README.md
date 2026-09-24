@@ -1,4 +1,7 @@
 ---
+genres:
+  - adventure
+  - platformer
 directors_cut: https://www.foumartgames.com/games/Odyssey/
 video: https://youtu.be/AKqqwFODsuk
 # See github.com/js13kGames/hello-world for supported frontmatter
